@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="es"> <!-- Modificado dinámicamente -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale1.0">
+    <title>Cápsula del Tiempo Sonora</title> <!-- Modificado dinámicamente -->
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* --- VARIABLES DE TEMA --- */
+        :root {
+            /* Tema Oscuro por Defecto (Noche) */
+            --bg-start: #111827; --bg-end: #1f2937; --text-main: #e5e7eb;
+            --text-secondary: #9ca3af; --glass-bg: rgba(31, 41, 55, 0.5);
+            --border-color: rgba(255, 255, 255, 0.1); --input-bg: rgba(17, 24, 39, 0.8);
+            --input-border: #4b5563;
+        }
+        
+        /* --- FONDOS DINÁMICOS (TEMA OSCURO) --- */
+        body.theme-dark.bg-dynamic-morning { --bg-start: #1e2a4a; --bg-end: #3b3c5e; }
+        body.theme-dark.bg-dynamic-day { --bg-start: #254a6e; --bg-end: #3b82f6; }
+        body.theme-dark.bg-dynamic-evening { --bg-start: #4a2f4f; --bg-end: #3c3b5e; }
+        body.theme-dark.bg-dynamic-night { --bg-start: #111827; --bg-end: #1f2937; }
+
+        body.theme-light {
+            --bg-start: #f3f4f6; --bg-end: #e5e7eb; --text-main: #1f2937;
+            --text-secondary: #4b5563; --glass-bg: rgba(255, 255, 255, 0.6);
+            --border-color: rgba(0, 0, 0, 0.1); --input-bg: rgba(229, 231, 235, 0.8);
+            --input-border: #d1d5db;
+        }
+        /* --- ESTILOS GENERALES --- */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%); 
+            color: var(--text-main); 
+            transition: background 1s, color 0.3s; /* Transición más larga para el fondo */
+        }
+        .glass-effect { background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--border-color); border-radius: 1.5rem; transition: background 0.3s, border 0.3s; }
+        .form-input, .form-textarea { background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 0.5rem; padding: 0.75rem; width: 100%; color: var(--text-main); transition: border-color 0.2s, background-color 0.3s; }
+        .form-input:focus, .form-textarea:focus { outline: none; border-color: #60a5fa; }
+        .fa-spin-hover:hover { animation: fa-spin 2s infinite linear; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-semibold text-white transition-colors; }
+        .btn-blue { background-color: #3b82f6; } .btn-blue:hover { background-color: #2563eb; }
+        .btn-gray { background-color: #4b5563; } .btn-gray:hover { background-color: #374151; }
+        .btn-red { background-color: #ef4444; } .btn-red:hover { background-color: #dc2626; }
+        .btn-icon { background: none; border: none; padding: 0.5rem; border-radius: 99px; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; }
+        .btn-icon:hover { background-color: rgba(107, 114, 128, 0.2); }
+        
+        /* --- CALENDARIO (con Emojis y Ecos) --- */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
+        .calendar-day { transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .calendar-day:hover:not(.empty) { transform: scale(1.05); background-color: rgba(59, 130, 246, 0.3); }
+        
+        /* Iconos de estado (derecha) */
+        .calendar-day.has-entries::after { content: '\f001'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; bottom: 8px; right: 8px; font-size: 0.75rem; color: #60a5fa; opacity: 0.8; }
+        .calendar-day.has-multiple-entries::after { content: '\f0c9'; } /* Icono de 'lista' */
+        .calendar-day.has-image::before { content: '\f03e'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; top: 8px; right: 8px; font-size: 0.75rem; color: #a78bfa; opacity: 0.8; }
+        
+        /* Icono de Emoji (izquierda) */
+        .calendar-day-mood {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        
+        /* NUEVO: Animación "Eco del Pasado" */
+        .calendar-day.has-echo {
+            animation: echo 2s infinite;
+        }
+        @keyframes echo {
+            0% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(167, 139, 250, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0); }
+        }
+
+        /* --- MODAL Y SPINNER --- */
+        .modal-enter { animation: fadeIn 0.3s ease-out forwards; }
+        .modal-leave { animation: fadeOut 0.3s ease-in forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes fadeOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+        .spinner { display: none; }
+        button:disabled .spinner { display: inline-block; }
+        button:disabled .btn-text { display: none; }
+        /* --- REPRODUCTOR --- */
+        .progress-bar-container { background-color: rgba(107, 114, 128, 0.2); cursor: pointer; }
+        #progress-bar { background: linear-gradient(90deg, #60a5fa, #3b82f6); transition: width 0.1s linear; }
+        #volume-slider { display: none; width: 80px; -webkit-appearance: none; appearance: none; height: 5px; background: #4b5563; border-radius: 5px; outline: none; opacity: 0.7; transition: opacity .2s; }
+        #volume-slider:hover { opacity: 1; }
+        #volume-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; background: #e5e7eb; border-radius: 50%; cursor: pointer; }
+        #volume-slider::-moz-range-thumb { width: 15px; height: 15px; background: #e5e7eb; border-radius: 50%; cursor: pointer; }
+        /* --- NOTIFICACIONES TOAST --- */
+        #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 100; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast { padding: 1rem; border-radius: 0.5rem; color: white; font-semibold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: toastIn 0.5s, toastOut 0.5s 3s forwards; }
+        .toast-success { background-color: #22c55e; }
+        .toast-error { background-color: #ef4444; }
+        .toast-info { background-color: #3b82f6; }
+        @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+        /* --- SWITCH DE TEMA --- */
+        .theme-switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+        .theme-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5563; transition: .4s; border-radius: 26px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #3b82f6; }
+        input:checked + .slider:before { transform: translateX(24px); }
+        /* --- Grabadora de Audio --- */
+        #record-audio-btn.is-recording { background-color: #ef4444; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        #recording-timer { color: var(--text-secondary); }
+        /* --- Selector de Estado de Ánimo --- */
+        .mood-selector button { font-size: 1.5rem; opacity: 0.5; transition: opacity 0.2s, transform 0.2s; }
+        .mood-selector button:hover { opacity: 1; transform: scale(1.1); }
+        .mood-selector button.selected { opacity: 1; transform: scale(1.2); text-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
+    </style>
+    <!-- Carga de la API de YouTube -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body class="min-h-screen p-4 theme-dark"> <!-- Inicia con theme-dark por defecto -->
+    
+    <!-- Contenedor de Toasts -->
+    <div id="toast-container"></div>
+
+    <!-- Ruleta de Ajustes -->
+    <div class="fixed top-4 right-4 z-50">
+        <button id="settings-btn" title="Ajustes" class="w-12 h-12 bg-gray-800/50 text-white rounded-full flex items-center justify-center text-xl hover:bg-gray-700/70 transition-colors backdrop-blur-sm">
+            <i class="fas fa-cog fa-spin-hover"></i>
+        </button>
+        <div id="settings-menu" class="absolute top-14 right-0 w-64 glass-effect p-4 rounded-lg shadow-2xl hidden origin-top-right">
+            <div class="space-y-4">
+                <h4 class="font-bold text-lg" data-i18n-key="settingsTitle">Ajustes</h4>
+                <!-- Selector de Idioma -->
+                <div class="flex justify-between items-center">
+                    <span data-i18n-key="settingsLanguage">Idioma</span>
+                    <select id="language-select" class="form-input text-sm py-1 px-2 w-28" style="color: var(--text-main); background-color: var(--input-bg); border-color: var(--input-border);">
+                        <option value="es">Español</option>
+                        <option value="en">English</option>
+                        <option value="zh">简体中文</option>
+                        <option value="hi">हिन्दी</option>
+                        <option value="fr">Français</option>
+                    </select>
+                </div>
+                <!-- Selector de Tema -->
+                <div class="flex justify-between items-center">
+                    <span data-i18n-key="settingsTheme">Tema Claro</span>
+                    <label class="theme-switch">
+                        <input type="checkbox" id="theme-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <!-- Importar/Exportar -->
+                <div class="border-t border-gray-500/50 my-2"></div>
+                <div>
+                    <button id="export-btn" class="w-full text-left p-2 rounded-md hover:bg-blue-600/50 transition-colors" title="Exportar metadatos (no incluye archivos)">
+                        <i class="fas fa-file-export mr-2"></i><span data-i18n-key="settingsExport">Exportar JSON</span>
+                    </button>
+                    <button id="import-btn" class="w-full text-left p-2 rounded-md hover:bg-blue-600/50 transition-colors" title="Importar metadatos. Debes cargar los audios por separado.">
+                        <i class="fas fa-file-import mr-2"></i><span data-i18n-key="settingsImport">Importar JSON</span>
+                    </button>
+                    <input type="file" id="import-file-input" class="hidden" accept=".json">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-6xl mx-auto space-y-8 flex flex-col items-center justify-center min-h-screen">
+        <!-- Encabezado -->
+        <header class="text-center space-y-4">
+            <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500" data-i18n-key="appTitle">
+                Cápsula del Tiempo Sonora
+            </h1>
+            <p class="text-gray-400" data-i18n-key="appSubtitle">Tu diario sonoro personal. Tus datos se guardan automáticamente en tu navegador.</p>
+        </header>
+
+        <!-- Contenido Principal -->
+        <main class="grid md:grid-cols-2 gap-8 w-full">
+            <!-- Sección del Calendario -->
+            <div class="glass-effect p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <button id="prev-month" title="Mes anterior" class="btn-icon"><i class="fas fa-chevron-left"></i></button>
+                    <!-- Contenedor para los botones centrales -->
+                    <div class="flex items-center space-x-2">
+                        <button id="today-btn" class="btn btn-gray text-sm py-1 px-3" data-i18n-key="calendarToday">Hoy</button>
+                        <button id="random-btn" title="Mensaje en una Botella" class="btn-icon text-lg text-blue-300 hover:text-blue-200">
+                            <i class="fas fa-flask"></i> <!-- Icono de frasco -->
+                        </button>
+                    </div>
+                    <h2 id="month-year" class="text-xl font-bold"></h2>
+                    <button id="next-month" title="Mes siguiente" class="btn-icon"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <!-- Nombres de los días (generados dinámicamente) -->
+                <div id="calendar-day-names" class="grid grid-cols-7 text-center text-xs text-gray-400 mb-2"></div>
+                <div id="calendar-grid" class="calendar-grid"></div>
+            </div>
+
+            <!-- Sección del Reproductor y Detalles -->
+            <div class="glass-effect p-6 shadow-2xl flex flex-col justify-between space-y-4">
+                <div class="flex-grow space-y-4">
+                    <div class="flex items-center space-x-4">
+                        <img id="track-image" src="https://placehold.co/100x100/1f2937/4b5563?text=Imagen" class="w-24 h-24 rounded-lg object-cover bg-gray-800">
+                        <div class="flex-1 overflow-hidden">
+                            <p class="text-sm text-gray-400" data-i18n-key="playerNowPlaying">REPRODUCIENDO AHORA</p>
+                            <h3 id="current-track-title" class="text-lg font-semibold truncate" data-i18n-key="playerDefaultTrack">Ningún audio seleccionado</h3>
+                            <p id="current-track-date" class="text-xs text-blue-400 flex items-center cursor-pointer group">
+                                <span id="track-date-text"></span> 
+                                <i id="edit-entry-btn" title="Editar esta entrada" class="fas fa-pencil-alt ml-2 text-gray-500 group-hover:text-white transition-colors"></i>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div id="metadata-display" class="text-sm space-y-2 text-gray-300 hidden">
+                         <p><i class="fas fa-map-marker-alt fa-fw mr-2 text-blue-400"></i> <strong id="display-location"></strong></p>
+                         <p><i class="fas fa-align-left fa-fw mr-2 text-blue-400"></i> <span id="display-description"></span></p>
+                         <p><i class="fas fa-tags fa-fw mr-2 text-blue-400"></i> <span id="display-tags" class="bg-gray-800 px-2 py-1 rounded-full text-xs"></span></p>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                     <div class="flex items-center justify-center space-x-4 text-2xl">
+                        <button id="prev-track-btn" title="Entrada anterior" class="btn-icon text-xl"><i class="fas fa-step-backward"></i></button>
+                        <button id="play-pause-btn" title="Reproducir/Pausar" class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg text-3xl transition-transform hover:scale-110">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button id="next-track-btn" title="Siguiente entrada" class="btn-icon text-xl"><i class="fas fa-step-forward"></i></button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="progress-bar-container w-full h-2 rounded-full overflow-hidden">
+                            <div id="progress-bar" class="h-full rounded-full"></div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                           <button id="volume-btn" class="btn-icon text-sm"><i class="fas fa-volume-up"></i></button>
+                           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+                        </div>
+                    </div>
+                     <div class="flex justify-between text-xs text-gray-400 -mt-2">
+                        <span id="current-time">0:00</span>
+                        <span id="total-duration">0:00</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Principal: Editar/Crear Entrada -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden z-40">
+        <div class="glass-effect p-6 rounded-2xl w-full max-w-lg space-y-4 modal-enter max-h-[90vh] overflow-y-auto">
+            <!-- Título del Modal -->
+            <h3 class="text-lg font-bold">
+                <span id="modal-title-new" data-i18n-key="modalTitleNew">Nueva Entrada para</span>
+                <span id="modal-title-edit" data-i18n-key="modalTitleEdit">Editando Entrada de</span>
+                <span id="modal-date" class="text-blue-400"></span>
+            </h3>
+            
+            <form id="entry-form" class="space-y-4">
+                <!-- Selector de Fuente de Audio -->
+                <div>
+                    <label class="block text-sm font-medium mb-1" data-i18n-key="modalAudioSource">Fuente de Audio</label>
+                    <div class="flex items-center space-x-4 mb-2">
+                        <label for="sourceTypeLocal" class="flex items-center cursor-pointer">
+                            <input type="radio" name="sourceType" value="local" id="sourceTypeLocal" class="mr-1" checked>
+                            <span data-i18n-key="modalSourceLocal">Archivo Local</span>
+                        </label>
+                        <label for="sourceTypeYoutube" class="flex items-center cursor-pointer">
+                            <input type="radio" name="sourceType" value="youtube" id="sourceTypeYoutube" class="mr-1">
+                            YouTube
+                        </label>
+                        <!-- Botón de Grabadora -->
+                        <button type="button" id="record-audio-btn" class="btn-icon" data-i18n-key-title="modalRecordAudioTitle">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <span id="recording-timer" class="text-sm">0:00</span>
+                    </div>
+                    
+                    <!-- Sección de Archivos Locales -->
+                    <div id="local-audio-section">
+                        <label class="block text-sm font-medium mb-1" data-i18n-key="modalLocalAudio">Audio Local</label>
+                        <select id="modal-audio-select" class="form-input mb-2"></select>
+                        <label class="text-xs text-gray-400" data-i18n-key="modalOrUploadNew">...o sube uno nuevo:</label>
+                        <input id="modal-new-audio" type="file" accept="audio/*" class="form-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+
+                    <!-- Sección de YouTube -->
+                    <div id="youtube-audio-section" class="hidden">
+                         <label class="block text-sm font-medium mb-1" data-i18n-key="modalYoutubeUrl">URL de YouTube</label>
+                         <input id="modal-youtube-url" type="text" class="form-input">
+                    </div>
+                </div>
+
+                <!-- Campos de Metadatos -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1" data-i18n-key="modalTime">Hora</label>
+                        <input id="modal-time" type="time" class="form-input">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1" data-i18n-key="modalLocation">Ubicación</label>
+                        <input id="modal-location" type="text" class="form-input">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1" data-i18n-key="modalDescription">Descripción</label>
+                    <textarea id="modal-description" rows="2" class="form-textarea"></textarea>
+                </div>
+                 <div>
+                    <label class="block text-sm font-medium mb-1" data-i18n-key="modalTags">Etiquetas (separadas por coma)</label>
+                    <input id="modal-tags" type="text" class="form-input">
+                </div>
+                
+                <!-- Selector de Estado de Ánimo -->
+                <div>
+                    <label class="block text-sm font-medium mb-1" data-i18n-key="modalMood">Estado de Ánimo</label>
+                    <div class="mood-selector flex justify-around p-2 rounded-lg">
+                        <button type="button" data-mood="😄" title="Feliz">😄</button>
+                        <button type="button" data-mood="😊" title="Bien">😊</button>
+                        <button type="button" data-mood="😐" title="Neutral">😐</button>
+                        <button type="button" data-mood="😔" title="Triste">😔</button>
+                        <button type="button" data-mood="😡" title="Enojado">😡</button>
+                    </div>
+                </div>
+                
+                <!-- Biblioteca de Imágenes -->
+                <div>
+                    <label class="block text-sm font-medium mb-1" data-i18n-key="modalImage">Imagen (opcional)</label>
+                    <select id="modal-image-select" class="form-input mb-2"></select>
+                    <label class="text-xs text-gray-400" data-i18n-key="modalOrUploadNew">...o sube una nueva:</label>
+                    <input id="modal-new-image" type="file" accept="image/*" class="form-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </form>
+            <div class="flex justify-between items-center">
+                <button id="remove-entry-btn" class="btn btn-red" data-i18n-key="modalDelete">Eliminar Entrada</button>
+                <div class="space-x-4">
+                    <button id="close-modal-btn" class="btn btn-gray" data-i18n-key="modalClose">Cerrar</button>
+                    <button id="save-entry-btn" class="btn btn-blue w-28">
+                        <span class="btn-text" data-i18n-key="modalSave">Guardar</span>
+                        <i class="fas fa-spinner fa-spin spinner"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Lista de Entradas del Día -->
+    <div id="day-entries-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden z-50">
+        <div class="glass-effect p-6 rounded-2xl w-full max-w-md space-y-4 modal-enter">
+             <h3 class="text-lg font-bold">
+                <span data-i18n-key="dayEntriesTitle">Entradas para</span>
+                <span id="day-entries-date" class="text-blue-400"></span>
+            </h3>
+            <div id="day-entries-list" class="space-y-2 max-h-64 overflow-y-auto">
+                <!-- Entradas generadas dinámicamente -->
+            </div>
+            <div class="flex justify-between items-center">
+                <button id="day-entries-add-new-btn" class="btn btn-blue" data-i18n-key="dayEntriesNew">Añadir Nueva</button>
+                <button id="day-entries-close-btn" class="btn btn-gray" data-i18n-key="modalClose">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="audio-player" class="hidden"></audio>
+    <!-- Reproductor de YouTube (oculto) -->
+    <div id="youtube-player" class="absolute -left-[9999px] w-1 h-1"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- DICCIONARIO DE TRADUCCIONES ---
+        const translations = {
+            'es': {
+                'pageTitle': 'Cápsula del Tiempo Sonora',
+                'appTitle': 'Cápsula del Tiempo Sonora',
+                'appSubtitle': 'Tu diario sonoro personal. Tus datos se guardan automáticamente en tu navegador.',
+                'settingsTitle': 'Ajustes',
+                'settingsLanguage': 'Idioma',
+                'settingsTheme': 'Tema Claro',
+                'settingsExport': 'Exportar JSON',
+                'settingsImport': 'Importar JSON',
+                'calendarToday': 'Hoy',
+                'calendarDaysShort': 'DOM,LUN,MAR,MIÉ,JUE,VIE,SÁB',
+                'playerNowPlaying': 'REPRODUCIENDO AHORA',
+                'playerDefaultTrack': 'Ningún audio seleccionado',
+                'modalTitleNew': 'Nueva Entrada para',
+                'modalTitleEdit': 'Editando Entrada de',
+                'modalAudioSource': 'Fuente de Audio',
+                'modalSourceLocal': 'Archivo Local',
+                'modalRecordAudioTitle': 'Grabar audio desde el micrófono',
+                'modalLocalAudio': 'Audio Local',
+                'modalOrUploadNew': '...o sube uno nuevo:',
+                'modalYoutubeUrl': 'URL de YouTube',
+                'modalPlaceholderYoutube': 'Pega el enlace de YouTube aquí',
+                'modalTime': 'Hora',
+                'modalLocation': 'Ubicación',
+                'modalPlaceholderLocation': 'Ej: Parque del Retiro',
+                'modalDescription': 'Descripción',
+                'modalPlaceholderDescription': 'Describe el sonido...',
+                'modalTags': 'Etiquetas (separadas por coma)',
+                'modalPlaceholderTags': 'Ej: naturaleza, pájaros, paz',
+                'modalMood': 'Estado de Ánimo',
+                'modalImage': 'Imagen (opcional)',
+                'modalDelete': 'Eliminar Entrada',
+                'modalClose': 'Cerrar',
+                'modalSave': 'Guardar',
+                'modalSelectAudio': '-- Selecciona un audio --',
+                'modalSelectImage': '-- Selecciona una imagen --',
+                'dayEntriesTitle': 'Entradas para',
+                'dayEntriesNew': 'Añadir Nueva',
+                'toastSaveSuccess': 'Entrada guardada con éxito.',
+                'toastDeleteSuccess': 'Entrada eliminada.',
+                'toastLoadSuccess': 'Datos cargados.',
+                'toastLoadError': 'Error al cargar datos de la base de datos.',
+                'toastDbError': 'Error crítico: No se pudo iniciar la base de datos.',
+                'toastDbMigrationSuccess': '¡Base de datos actualizada a v2!',
+                'toastDbMigrationError': 'Error al migrar la base de datos.',
+                'toastDbLoadError': 'Error al cargar datos de la base de datos.',
+                'toastInvalidUrl': 'La URL de YouTube no es válida.',
+                'toastNoAudio': 'Por favor, selecciona, sube o graba un audio.',
+                'toastSaveError': 'Error al guardar la entrada.',
+                'toastDeleteError': 'Error al eliminar la entrada.',
+                'toastFileNotFound': 'No se pudo encontrar el archivo de audio.',
+                'toastFileLoadError': 'No se pudo cargar el archivo.',
+                'toastMediaLoadError': 'No se pudo cargar el archivo (ID: {id})',
+                'toastYtNotReady': 'El reproductor de YouTube aún no está listo.',
+                'toastNoAudioEntry': 'Esta entrada no tiene audio asignado.',
+                'toastMemoryFound': '¡Recuerdo! 😮 Hoy, hace {years} año(s), guardaste una entrada.',
+                'toastRecStart': '¡Grabación iniciada!',
+                'toastRecStop': 'Grabación detenida. Se añadirá al guardar.',
+                'toastRecError': 'Error al iniciar la grabadora: {error}',
+                'confirmDelete': '¿Estás seguro de que quieres eliminar esta entrada? Esta acción no se puede deshacer.'
+            },
+            'en': {
+                'pageTitle': 'Sonic Time Capsule',
+                'appTitle': 'Sonic Time Capsule',
+                'appSubtitle': 'Your personal sound journal. Your data is saved automatically in your browser.',
+                'settingsTitle': 'Settings',
+                'settingsLanguage': 'Language',
+                'settingsTheme': 'Light Theme',
+                'settingsExport': 'Export JSON',
+                'settingsImport': 'Import JSON',
+                'calendarToday': 'Today',
+                'calendarDaysShort': 'SUN,MON,TUE,WED,THU,FRI,SAT',
+                'playerNowPlaying': 'NOW PLAYING',
+                'playerDefaultTrack': 'No audio selected',
+                'modalTitleNew': 'New Entry for',
+                'modalTitleEdit': 'Editing Entry from',
+                'modalAudioSource': 'Audio Source',
+                'modalSourceLocal': 'Local File',
+                'modalRecordAudioTitle': 'Record audio from microphone',
+                'modalLocalAudio': 'Local Audio',
+                'modalOrUploadNew': '...or upload a new one:',
+                'modalYoutubeUrl': 'YouTube URL',
+                'modalPlaceholderYoutube': 'Paste the YouTube link here',
+                'modalTime': 'Time',
+                'modalLocation': 'Location',
+                'modalPlaceholderLocation': 'E.g.: Central Park',
+                'modalDescription': 'Description',
+                'modalPlaceholderDescription': 'Describe the sound...',
+                'modalTags': 'Tags (comma separated)',
+                'modalPlaceholderTags': 'E.g.: nature, birds, peace',
+                'modalMood': 'Mood',
+                'modalImage': 'Image (optional)',
+                'modalDelete': 'Delete Entry',
+                'modalClose': 'Close',
+                'modalSave': 'Save',
+                'modalSelectAudio': '-- Select an audio --',
+                'modalSelectImage': '-- Select an image --',
+                'dayEntriesTitle': 'Entries for',
+                'dayEntriesNew': 'Add New',
+                'toastSaveSuccess': 'Entry saved successfully.',
+                'toastDeleteSuccess': 'Entry deleted.',
+                'toastLoadSuccess': 'Data loaded.',
+                'toastLoadError': 'Error loading data from the database.',
+                'toastDbError': 'Critical Error: Could not initialize database.',
+                'toastDbMigrationSuccess': 'Database updated to v2!',
+                'toastDbMigrationError': 'Error migrating database.',
+                'toastDbLoadError': 'Error loading data from the database.',
+                'toastInvalidUrl': 'The YouTube URL is not valid.',
+                'toastNoAudio': 'Please select, upload, or record an audio.',
+                'toastSaveError': 'Error saving the entry.',
+                'toastDeleteError': 'Error deleting the entry.',
+                'toastFileNotFound': 'Could not find the audio file.',
+                'toastFileLoadError': 'Could not load the file.',
+                'toastMediaLoadError': 'Could not load file (ID: {id})',
+                'toastYtNotReady': 'The YouTube player is not ready yet.',
+                'toastNoAudioEntry': 'This entry has no assigned audio.',
+                'toastMemoryFound': 'Memory! 😮 Today, {years} year(s) ago, you saved an entry.',
+                'toastRecStart': 'Recording started!',
+                'toastRecStop': 'Recording stopped. Will be added on save.',
+                'toastRecError': 'Recorder error: {error}',
+                'confirmDelete': 'Are you sure you want to delete this entry? This action cannot be undone.'
+            },
+            'zh': { // Chino Simplificado
+                'pageTitle': '声音时间胶囊',
+                'appTitle': '声音时间胶囊',
+                'appSubtitle': '您的个人声音日记。您的数据会自动保存在浏览器中。',
+                'settingsTitle': '设置',
+                'settingsLanguage': '语言',
+                'settingsTheme': '浅色主题',
+                'settingsExport': '导出 JSON',
+                'settingsImport': '导入 JSON',
+                'calendarToday': '今天',
+                'calendarDaysShort': '日,一,二,三,四,五,六',
+                'playerNowPlaying': '正在播放',
+                'playerDefaultTrack': '未选择音频',
+                'modalTitleNew': '新条目于',
+                'modalTitleEdit': '编辑条目于',
+                'modalAudioSource': '音频来源',
+                'modalSourceLocal': '本地文件',
+                'modalRecordAudioTitle': '从麦克风录制音频',
+                'modalLocalAudio': '本地音频',
+                'modalOrUploadNew': '...或上传新的:',
+                'modalYoutubeUrl': 'YouTube 链接',
+                'modalPlaceholderYoutube': '在此处粘贴 YouTube 链接',
+                'modalTime': '时间',
+                'modalLocation': '地点',
+                'modalPlaceholderLocation': '例如：中央公园',
+                'modalDescription': '描述',
+                'modalPlaceholderDescription': '描述这个声音...',
+                'modalTags': '标签 (用逗号分隔)',
+                'modalPlaceholderTags': '例如：自然, 鸟, 平静',
+                'modalMood': '心情',
+                'modalImage': '图片 (可选)',
+                'modalDelete': '删除条目',
+                'modalClose': '关闭',
+                'modalSave': '保存',
+                'modalSelectAudio': '-- 选择一个音频 --',
+                'modalSelectImage': '-- 选择一张图片 --',
+                'dayEntriesTitle': '条目于',
+                'dayEntriesNew': '添加新的',
+                'toastSaveSuccess': '条目保存成功。',
+                'toastDeleteSuccess': '条目已删除。',
+                'toastLoadSuccess': '数据已加载。',
+                'toastLoadError': '从数据库加载数据时出错。',
+                'toastDbError': '严重错误：无法初始化数据库。',
+                'toastDbMigrationSuccess': '数据库已更新至 v2！',
+                'toastDbMigrationError': '迁移数据库时出错。',
+                'toastDbLoadError': '从数据库加载数据时出错。',
+                'toastInvalidUrl': 'YouTube 链接无效。',
+                'toastNoAudio': '请选择、上传或录制一个音频。',
+                'toastSaveError': '保存条目时出错。',
+                'toastDeleteError': '删除条目时出错。',
+                'toastFileNotFound': '找不到音频文件。',
+                'toastFileLoadError': '无法加载文件。',
+                'toastMediaLoadError': '无法加载文件 (ID: {id})',
+                'toastYtNotReady': 'YouTube 播放器尚未准备好。',
+                'toastNoAudioEntry': '此条目未分配音频。',
+                'toastMemoryFound': '记忆！😮 {years} 年前的今天，您保存了一个条目。',
+                'toastRecStart': '录音开始！',
+                'toastRecStop': '录音停止。保存时将添加。',
+                'toastRecError': '录音机错误: {error}',
+                'confirmDelete': '您确定要删除此条目吗？此操作无法撤销。'
+            },
+            'hi': { // Hindi
+                'pageTitle': 'सोनिक टाइम कैप्सूल',
+                'appTitle': 'सोनिक टाइम कैप्सूल',
+                'appSubtitle': 'आपकी व्यक्तिगत ध्वनि पत्रिका। आपका डेटा स्वचालित रूप से आपके ब्राउज़र में सहेजा जाता है।',
+                'settingsTitle': 'सेटिंग्स',
+                'settingsLanguage': 'भाषा',
+                'settingsTheme': 'लाइट थीम',
+                'settingsExport': 'JSON निर्यात करें',
+                'settingsImport': 'JSON आयात करें',
+                'calendarToday': 'आज',
+                'calendarDaysShort': 'रवि,सोम,मंगल,बुध,गुरु,शुक्र,शनि',
+                'playerNowPlaying': 'अभी बज रहा है',
+                'playerDefaultTrack': 'कोई ऑडियो चयनित नहीं है',
+                'modalTitleNew': 'के लिए नई प्रविष्टि',
+                'modalTitleEdit': 'से प्रविष्टि संपादित करना',
+                'modalAudioSource': 'ऑडियो स्रोत',
+                'modalSourceLocal': 'स्थानीय फ़ाइल',
+                'modalRecordAudioTitle': 'माइक्रोफ़ोन से ऑडियो रिकॉर्ड करें',
+                'modalLocalAudio': 'स्थानीय ऑडियो',
+                'modalOrUploadNew': '...या नया अपलोड करें:',
+                'modalYoutubeUrl': 'यूट्यूब यूआरएल',
+                'modalPlaceholderYoutube': 'यूट्यूब लिंक यहाँ पेस्ट करें',
+                'modalTime': 'समय',
+                'modalLocation': 'स्थान',
+                'modalPlaceholderLocation': 'जैसे: सेंट्रल पार्क',
+                'modalDescription': 'विवरण',
+                'modalPlaceholderDescription': 'ध्वनि का वर्णन करें...',
+                'modalTags': 'टैग (अल्पविराम से अलग)',
+                'modalPlaceholderTags': 'जैसे: प्रकृति, पक्षी, शांति',
+                'modalMood': 'मनोदशा',
+                'modalImage': 'छवि (वैकल्पिक)',
+                'modalDelete': 'प्रविष्टि हटाएं',
+                'modalClose': 'बंद करें',
+                'modalSave': 'सहेजें',
+                'modalSelectAudio': '-- एक ऑडियो चुनें --',
+                'modalSelectImage': '-- एक छवि चुनें --',
+                'dayEntriesTitle': 'के लिए प्रविष्टियां',
+                'dayEntriesNew': 'नया जोड़ें',
+                'toastSaveSuccess': 'प्रविष्टि सफलतापूर्वक सहेजी गई।',
+                'toastDeleteSuccess': 'प्रविष्टि हटा दी गई।',
+                'toastLoadSuccess': 'डेटा लोड हो गया।',
+                'toastLoadError': 'डेटाबेस से डेटा लोड करने में त्रुटि।',
+                'toastDbError': 'गंभीर त्रुटि: डेटाबेस प्रारंभ नहीं किया जा सका।',
+                'toastDbMigrationSuccess': 'डेटाबेस v2 में अपडेट किया गया!',
+                'toastDbMigrationError': 'डेटाबेस माइग्रेट करने में त्रुटि।',
+                'toastDbLoadError': 'डेटाबेस से डेटा लोड करने में त्रुटि।',
+                'toastInvalidUrl': 'यूट्यूब यूआरएल मान्य नहीं है।',
+                'toastNoAudio': 'कृपया एक ऑडियो चुनें, अपलोड करें या रिकॉर्ड करें।',
+                'toastSaveError': 'प्रविष्टि सहेजने में त्रुटि।',
+                'toastDeleteError': 'प्रविष्टि हटाने में त्रुटि।',
+                'toastFileNotFound': 'ऑडियो फ़ाइल नहीं मिली।',
+                'toastFileLoadError': 'फ़ाइल लोड नहीं की जा सकी।',
+                'toastMediaLoadError': 'फ़ाइल लोड नहीं की जा सकी (ID: {id})',
+                'toastYtNotReady': 'यूट्यूब प्लेयर अभी तैयार नहीं है।',
+                'toastNoAudioEntry': 'इस प्रविष्टि में कोई ऑडियो निर्दिष्ट नहीं है।',
+                'toastMemoryFound': 'याद! 😮 आज से {years} साल पहले, आपने एक प्रविष्टि सहेजी थी।',
+                'toastRecStart': 'रिकॉर्डिंग शुरू!',
+                'toastRecStop': 'रिकॉर्डिंग रुकी। सहेजने पर जोड़ दी जाएगी।',
+                'toastRecError': 'रिकॉर्डर त्रुटि: {error}',
+                'confirmDelete': 'क्या आप वाकई इस प्रविष्टि को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।'
+            },
+            'fr': { // Francés
+                'pageTitle': 'Capsule Temporelle Sonore',
+                'appTitle': 'Capsule Temporelle Sonore',
+                'appSubtitle': 'Votre journal sonore personnel. Vos données sont sauvegardées automatiquement dans votre navigateur.',
+                'settingsTitle': 'Paramètres',
+                'settingsLanguage': 'Langue',
+                'settingsTheme': 'Thème Clair',
+                'settingsExport': 'Exporter JSON',
+                'settingsImport': 'Importer JSON',
+                'calendarToday': "Aujourd'hui",
+                'calendarDaysShort': 'DIM,LUN,MAR,MER,JEU,VEN,SAM',
+                'playerNowPlaying': 'EN LECTURE',
+                'playerDefaultTrack': 'Aucun audio sélectionné',
+                'modalTitleNew': 'Nouvelle Entrée pour',
+                'modalTitleEdit': 'Édition de l\'Entrée du',
+                'modalAudioSource': "Source audio",
+                'modalSourceLocal': 'Fichier Local',
+                'modalRecordAudioTitle': "Enregistrer l'audio depuis le microphone",
+                'modalLocalAudio': 'Audio Local',
+                'modalOrUploadNew': '...ou téléchargez un nouveau:',
+                'modalYoutubeUrl': 'URL YouTube',
+                'modalPlaceholderYoutube': 'Collez le lien YouTube ici',
+                'modalTime': 'Heure',
+                'modalLocation': 'Lieu',
+                'modalPlaceholderLocation': 'Ex: Parc Monceau',
+                'modalDescription': 'Description',
+                'modalPlaceholderDescription': 'Décrivez le son...',
+                'modalTags': 'Tags (séparés par virgule)',
+                'modalPlaceholderTags': 'Ex: nature, oiseaux, paix',
+                'modalMood': 'Humeur',
+                'modalImage': 'Image (optionnel)',
+                'modalDelete': "Supprimer l'entrée",
+                'modalClose': 'Fermer',
+                'modalSave': 'Enregistrer',
+                'modalSelectAudio': '-- Sélectionnez un audio --',
+                'modalSelectImage': '-- Sélectionnez une image --',
+                'dayEntriesTitle': 'Entrées pour',
+                'dayEntriesNew': 'Ajouter Nouvelle',
+                'toastSaveSuccess': 'Entrée sauvegardée avec succès.',
+                'toastDeleteSuccess': 'Entrée supprimée.',
+                'toastLoadSuccess': 'Données chargées.',
+                'toastLoadError': 'Erreur lors du chargement des données depuis la base de données.',
+                'toastDbError': 'Erreur critique : Impossible d\'initialiser la base de données.',
+                'toastDbMigrationSuccess': 'Base de données mise à jour vers v2 !',
+                'toastDbMigrationError': 'Erreur lors de la migration de la base de données.',
+                'toastDbLoadError': 'Erreur lors du chargement des données depuis la base de données.',
+                'toastInvalidUrl': "L'URL YouTube n'est pas valide.",
+                'toastNoAudio': 'Veuillez sélectionner, télécharger ou enregistrer un audio.',
+                'toastSaveError': "Erreur lors de l'enregistrement de l'entrée.",
+                'toastDeleteError': "Erreur lors de la suppression de l'entrée.",
+                'toastFileNotFound': 'Fichier audio introuvable.',
+                'toastFileLoadError': 'Impossible de charger le fichier.',
+                'toastMediaLoadError': 'Impossible de charger le fichier (ID: {id})',
+                'toastYtNotReady': 'Le lecteur YouTube n\'est pas encore prêt.',
+                'toastNoAudioEntry': 'Cette entrée n\'a pas d\'audio assigné.',
+                'toastMemoryFound': 'Souvenir ! 😮 Il y a {years} an(s), vous avez sauvegardé une entrée.',
+                'toastRecStart': 'Enregistrement démarré !',
+                'toastRecStop': 'Enregistrement arrêté. Sera ajouté lors de la sauvegarde.',
+                'toastRecError': "Erreur de l'enregistreur: {error}",
+                'confirmDelete': 'Êtes-vous sûr de vouloir supprimer cette entrée ? Cette action est irréversible.'
+            }
+        };
+
+        // --- MANEJO DE IDIOMA ---
+        let currentLang = 'es';
+        const languageSelect = document.getElementById('language-select');
+        const calendarDayNamesEl = document.getElementById('calendar-day-names');
+
+        function getString(key) {
+            return translations[currentLang][key] || translations['es'][key] || key;
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            const langStrings = translations[lang] || translations['es'];
+
+            // 1. Elementos estáticos
+            document.querySelectorAll('[data-i18n-key]').forEach(el => {
+                const key = el.dataset.i18nKey;
+                if (langStrings[key]) el.textContent = langStrings[key];
+            });
+            // Títulos (atributos)
+            document.querySelectorAll('[data-i18n-key-title]').forEach(el => {
+                const key = el.dataset.i18nKeyTitle;
+                if (langStrings[key]) el.title = langStrings[key];
+            });
+
+
+            // 2. Atributos dinámicos
+            document.title = langStrings.pageTitle;
+            document.documentElement.lang = lang;
+            document.getElementById('modal-youtube-url').placeholder = langStrings.modalPlaceholderYoutube;
+            document.getElementById('modal-location').placeholder = langStrings.modalPlaceholderLocation;
+            document.getElementById('modal-description').placeholder = langStrings.modalPlaceholderDescription;
+            document.getElementById('modal-tags').placeholder = langStrings.modalPlaceholderTags;
+
+            // 3. UI Dinámica
+            generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+            updateMediaSelectors(); 
+            if (!currentlyPlayingEntryId) {
+                 currentTrackTitleEl.textContent = getString('playerDefaultTrack');
+            }
+
+            // 4. Guardar
+            localStorage.setItem('language', lang);
+        }
+
+        languageSelect.addEventListener('change', (e) => setLanguage(e.target.value));
+        
+        // --- BASE DE DATOS INDEXEDDB (ACTUALIZADA A V2) ---
+        const dbHelper = {
+            db: null,
+            initDB() {
+                return new Promise((resolve, reject) => {
+                    // VERSIÓN 2
+                    const request = indexedDB.open("capsulaTiempoDB", 2);
+                    
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        const transaction = event.target.transaction;
+                        const oldVersion = event.oldVersion;
+
+                        try {
+                            // Migración desde v0 (nada) o v1
+                            if (oldVersion < 1) {
+                                // Código original para v1 (mediaStore)
+                                if (!db.objectStoreNames.contains('mediaStore')) {
+                                    db.createObjectStore('mediaStore', { keyPath: 'id', autoIncrement: true });
+                                }
+                                // Código original para v1 (entriesStore) - Se eliminará si existe
+                                if (!db.objectStoreNames.contains('entriesStore')) {
+                                    db.createObjectStore('entriesStore', { keyPath: 'date' });
+                                }
+                            }
+                            
+                            // NUEVA MIGRACIÓN a v2
+                            if (oldVersion < 2) {
+                                console.log("Migrando base de datos a v2...");
+                                // 1. Recrear 'entriesStore'
+                                if (db.objectStoreNames.contains('entriesStore')) {
+                                    db.deleteObjectStore('entriesStore');
+                                }
+                                const newEntriesStore = db.createObjectStore('entriesStore', { keyPath: 'id', autoIncrement: true });
+                                
+                                // 2. Añadir el índice 'date'
+                                newEntriesStore.createIndex('date', 'date', { unique: false });
+                                console.log("entriesStore v2 creado con índice 'date'.");
+                            }
+                            
+                        } catch (e) {
+                             console.error("Error durante la migración de DB:", e);
+                             showToast('toastDbMigrationError', 'error');
+                             if (transaction) transaction.abort();
+                             reject(e);
+                        }
+                    };
+                    
+                    request.onsuccess = (event) => {
+                        this.db = event.target.result;
+                        console.log("Base de datos inicializada.");
+                        if (event.target.result.version === 2 && event.oldVersion < 2) { 
+                            showToast('toastDbMigrationSuccess', 'success');
+                        }
+                        resolve(this.db);
+                    };
+                    
+                    request.onerror = (event) => {
+                        console.error("Error al iniciar IndexedDB:", event.target.error);
+                        reject(event.target.error);
+                    };
+                });
+            },
+            
+            saveMedia(file) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['mediaStore'], 'readwrite');
+                    const store = transaction.objectStore('mediaStore');
+                    const request = store.put({ name: file.name, type: file.type, file: file });
+                    
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            
+            getMedia(id) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['mediaStore'], 'readonly');
+                    const store = transaction.objectStore('mediaStore');
+                    const request = store.get(id);
+                    
+                    request.onsuccess = () => {
+                        if (request.result && request.result.file) {
+                            resolve(request.result.file);
+                        } else {
+                            reject(new Error(`Media with id ${id} not found or has no file.`));
+                        }
+                    };
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            
+            getAllMedia() {
+                 return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['mediaStore'], 'readonly');
+                    const store = transaction.objectStore('mediaStore');
+                    const request = store.getAll();
+                    
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            
+            saveEntry(entry) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['entriesStore'], 'readwrite');
+                    const store = transaction.objectStore('entriesStore');
+                    const request = store.put(entry); 
+                    
+                    request.onsuccess = () => resolve(request.result); 
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            
+            getAllEntries() {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['entriesStore'], 'readonly');
+                    const store = transaction.objectStore('entriesStore');
+                    const request = store.getAll();
+                    
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            
+            getEntriesForDate(date) {
+                 return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['entriesStore'], 'readonly');
+                    const store = transaction.objectStore('entriesStore');
+                    const index = store.index('date'); 
+                    const request = index.getAll(date); 
+                    
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            },
+
+            deleteEntry(id) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['entriesStore'], 'readwrite');
+                    const store = transaction.objectStore('entriesStore');
+                    const request = store.delete(id);
+                    
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+        };
+
+        // --- Elementos del DOM ---
+        const toastContainer = document.getElementById('toast-container');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsMenu = document.getElementById('settings-menu');
+        const themeToggle = document.getElementById('theme-toggle');
+        const exportBtn = document.getElementById('export-btn');
+        const importBtn = document.getElementById('import-btn');
+        const importFileInput = document.getElementById('import-file-input');
+        const monthYearEl = document.getElementById('month-year');
+        const calendarGridEl = document.getElementById('calendar-grid');
+        const prevMonthBtn = document.getElementById('prev-month');
+        const nextMonthBtn = document.getElementById('next-month');
+        const todayBtn = document.getElementById('today-btn');
+        const randomBtn = document.getElementById('random-btn'); 
+        const audioPlayer = document.getElementById('audio-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const prevTrackBtn = document.getElementById('prev-track-btn');
+        const nextTrackBtn = document.getElementById('next-track-btn');
+        const volumeBtn = document.getElementById('volume-btn');
+        const volumeSlider = document.getElementById('volume-slider');
+        const progressBar = document.getElementById('progress-bar');
+        const progressBarContainer = progressBar.parentElement;
+        const currentTimeEl = document.getElementById('current-time');
+        const totalDurationEl = document.getElementById('total-duration');
+        const currentTrackTitleEl = document.getElementById('current-track-title');
+        const trackDateTextEl = document.getElementById('track-date-text');
+        const editEntryBtn = document.getElementById('edit-entry-btn');
+        const trackImageEl = document.getElementById('track-image');
+        const metadataDisplayEl = document.getElementById('metadata-display');
+        
+        // Modal Principal
+        const modal = document.getElementById('modal');
+        const modalDateEl = document.getElementById('modal-date');
+        const modalTitleNew = document.getElementById('modal-title-new');
+        const modalTitleEdit = document.getElementById('modal-title-edit');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const removeEntryBtn = document.getElementById('remove-entry-btn');
+        const saveEntryBtn = document.getElementById('save-entry-btn');
+        const sourceTypeLocal = document.getElementById('sourceTypeLocal');
+        const sourceTypeYoutube = document.getElementById('sourceTypeYoutube');
+        const localAudioSection = document.getElementById('local-audio-section');
+        const youtubeAudioSection = document.getElementById('youtube-audio-section');
+        const modalYoutubeUrl = document.getElementById('modal-youtube-url');
+        const modalAudioSelect = document.getElementById('modal-audio-select');
+        const modalNewAudio = document.getElementById('modal-new-audio');
+        const modalImageSelect = document.getElementById('modal-image-select');
+        const modalNewImage = document.getElementById('modal-new-image');
+        const modalTime = document.getElementById('modal-time');
+        const modalLocation = document.getElementById('modal-location');
+        const modalDescription = document.getElementById('modal-description');
+        const modalTags = document.getElementById('modal-tags');
+        const moodSelector = document.querySelector('.mood-selector');
+        
+        // Modal de Lista de Entradas
+        const dayEntriesModal = document.getElementById('day-entries-modal');
+        const dayEntriesList = document.getElementById('day-entries-list');
+        const dayEntriesDateEl = document.getElementById('day-entries-date');
+        const dayEntriesAddNewBtn = document.getElementById('day-entries-add-new-btn');
+        const dayEntriesCloseBtn = document.getElementById('day-entries-close-btn');
+
+        // Grabadora
+        const recordAudioBtn = document.getElementById('record-audio-btn');
+        const recordingTimerEl = document.getElementById('recording-timer');
+        
+        // --- Estado de la Aplicación ---
+        let currentDate = new Date();
+        let allEntries = []; 
+        let mediaLibrary = []; 
+        let fileCache = new Map(); 
+        let selectedDateForModal = null; 
+        let selectedEntryIdForModal = null; 
+        let currentlyPlayingEntryId = null; 
+        let modalCloseTimeout = null; 
+        
+        // Grabadora
+        let mediaRecorder = null;
+        let recordingChunks = [];
+        let recordedBlob = null;
+        let recordingTimerInterval = null;
+        let recordingStartTime = null;
+
+        // Estado de Ánimo
+        let selectedMood = null;
+
+        // --- Gestor de Reproducción ---
+        let ytPlayer = null;
+        let activePlayerType = 'none'; 
+        let ytProgressInterval = null; 
+        
+        // --- FUNCIÓN DE NOTIFICACIONES TOAST ---
+        const showToast = (messageKey, type = 'info', substitutions = {}) => {
+            let message = getString(messageKey);
+            for (const key in substitutions) {
+                message = message.replace(`{${key}}`, substitutions[key]);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 3500);
+        };
+        
+        // --- LÓGICA DE AJUSTES Y TEMA ---
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+            if (!settingsMenu.contains(e.target) && !settingsBtn.contains(e.target)) {
+                settingsMenu.classList.add('hidden');
+            }
+        });
+        
+        // --- LÓGICA DE FONDOS DINÁMICOS ---
+        const applyDynamicBackground = () => {
+            const hour = new Date().getHours();
+            const body = document.body;
+            
+            // Limpiar clases antiguas
+            body.classList.remove('bg-dynamic-morning', 'bg-dynamic-day', 'bg-dynamic-evening', 'bg-dynamic-night');
+
+            if (body.classList.contains('theme-dark')) {
+                if (hour >= 5 && hour < 11) { // Mañana
+                    body.classList.add('bg-dynamic-morning');
+                } else if (hour >= 11 && hour < 18) { // Día
+                    body.classList.add('bg-dynamic-day');
+                } else if (hour >= 18 && hour < 22) { // Tarde/Ocaso
+                    body.classList.add('bg-dynamic-evening');
+                } else { // Noche
+                    body.classList.add('bg-dynamic-night');
+                }
+            }
+        };
+
+        const applyTheme = (theme) => {
+            document.body.classList.toggle('theme-light', theme === 'light');
+            document.body.classList.toggle('theme-dark', theme === 'dark');
+            themeToggle.checked = (theme === 'light');
+            applyDynamicBackground(); // Aplicar fondo dinámico al cambiar tema
+        };
+
+        themeToggle.addEventListener('change', () => {
+            const newTheme = themeToggle.checked ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        });
+        
+        // --- LÓGICA DE CARGA Y RENDERIZADO ---
+        async function loadDataAndRender() {
+            try {
+                allEntries = await dbHelper.getAllEntries();
+                mediaLibrary = await dbHelper.getAllMedia();
+                fileCache.clear();
+                
+                generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+                updateMediaSelectors();
+                
+                if (document.body.dataset.firstLoad !== 'false') {
+                    checkMemories();
+                    document.body.dataset.firstLoad = 'false';
+                }
+                
+            } catch (error) {
+                console.error("Error al cargar datos:", error);
+                showToast('toastDbLoadError', 'error');
+            }
+        }
+        
+        function checkMemories() {
+            const today = new Date();
+            const dayMonth = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const currentYear = today.getFullYear().toString();
+            
+            allEntries.forEach(entry => {
+                const [year, month, day] = entry.date.split('-');
+                if (`${month}-${day}` === dayMonth && year !== currentYear) {
+                    const yearsAgo = currentYear - parseInt(year);
+                    showToast('toastMemoryFound', 'info', { years: yearsAgo });
+                }
+            });
+        }
+        
+        function updateMediaSelectors() {
+            modalAudioSelect.innerHTML = `<option value="">${getString('modalSelectAudio')}</option>`;
+            modalImageSelect.innerHTML = `<option value="">${getString('modalSelectImage')}</option>`;
+            
+            mediaLibrary.forEach(media => {
+                const option = `<option value="${media.id}">${media.name}</option>`;
+                if (media.type.startsWith('audio/')) {
+                    modalAudioSelect.insertAdjacentHTML('beforeend', option);
+                } else if (media.type.startsWith('image/')) {
+                    modalImageSelect.insertAdjacentHTML('beforeend', option);
+                }
+            });
+        }
+        
+        // --- LÓGICA DEL CALENDARIO (MODIFICADA con Ecos y Emojis) ---
+        const generateCalendar = (year, month) => {
+            calendarGridEl.innerHTML = '';
+            monthYearEl.textContent = new Date(year, month).toLocaleDateString(currentLang, { month: 'long', year: 'numeric' });
+            calendarDayNamesEl.innerHTML = '';
+            getString('calendarDaysShort').split(',').forEach(day => {
+                calendarDayNamesEl.innerHTML += `<span class="text-center">${day}</span>`;
+            });
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const currentYearStr = year.toString(); // Año que se está viendo
+
+            for (let i = 0; i < firstDay; i++) calendarGridEl.insertAdjacentHTML('beforeend', '<div class="calendar-day empty"></div>');
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const entriesForDay = allEntries.filter(entry => entry.date === dateStr);
+                
+                let dayClasses = 'calendar-day border border-gray-700 rounded-lg p-2 h-16 flex items-start justify-start cursor-pointer';
+                let hasImage = false;
+                let moodEmoji = ''; 
+
+                if (entriesForDay.length > 0) {
+                    dayClasses += ' has-entries';
+                    if (entriesForDay.length > 1) {
+                        dayClasses += ' has-multiple-entries';
+                    }
+                    if (entriesForDay.some(e => e.imageId)) {
+                        hasImage = true;
+                    }
+                    if (entriesForDay[0].mood) {
+                        moodEmoji = `<span class="calendar-day-mood">${entriesForDay[0].mood}</span>`;
+                    }
+                }
+                if (hasImage) dayClasses += ' has-image';
+                
+                // --- Lógica del Eco ---
+                const dayMonth = `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const hasMemory = allEntries.some(e => {
+                    const [entryYear, entryMonth, entryDay] = e.date.split('-');
+                    return `${entryMonth}-${entryDay}` === dayMonth && entryYear !== currentYearStr;
+                });
+                if (hasMemory) {
+                    dayClasses += ' has-echo';
+                }
+                // --- Fin Lógica del Eco ---
+
+                const today = new Date();
+                if (year === today.getFullYear() && month === today.getMonth() && day === today.getDate()) dayClasses += ' bg-blue-800 font-bold';
+                
+                const dayCellHTML = `<div class="${dayClasses}" data-date="${dateStr}">${day}${moodEmoji}</div>`;
+                calendarGridEl.insertAdjacentHTML('beforeend', dayCellHTML);
+            }
+            document.querySelectorAll('.calendar-day:not(.empty)').forEach(cell => {
+                cell.addEventListener('click', () => handleDayClick(cell.dataset.date));
+            });
+        };
+
+        const handleDayClick = async (dateStr) => {
+            const entriesForDay = await dbHelper.getEntriesForDate(dateStr);
+            
+            if (entriesForDay.length === 0) {
+                openModal(dateStr, null);
+            } else if (entriesForDay.length === 1) {
+                playAudioEntry(entriesForDay[0].id);
+            } else {
+                openDayEntriesModal(dateStr, entriesForDay);
+            }
+        };
+
+        prevMonthBtn.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+        });
+        nextMonthBtn.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+        });
+        todayBtn.addEventListener('click', () => {
+            currentDate = new Date();
+            generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+        });
+        
+        // --- Lógica del Botón Aleatorio ---
+        randomBtn.addEventListener('click', () => {
+            if (allEntries.length === 0) {
+                return;
+            }
+            const randomIndex = Math.floor(Math.random() * allEntries.length);
+            const randomEntry = allEntries[randomIndex];
+            playAudioEntry(randomEntry.id);
+        });
+        
+        // --- LÓGICA DE MODAL (MODIFICADA) ---
+        const openModal = (dateStr, entryId) => {
+            if (modalCloseTimeout) {
+                clearTimeout(modalCloseTimeout);
+                modalCloseTimeout = null;
+            }
+            modal.firstElementChild.classList.remove('modal-leave');
+            
+            document.getElementById('entry-form').reset(); 
+            stopRecording(); 
+            
+            selectedDateForModal = dateStr;
+            selectedEntryIdForModal = entryId;
+            selectedMood = null;
+            updateMoodUI();
+            
+            const entry = entryId ? allEntries.find(e => e.id === entryId) : null;
+            
+            if (entry) {
+                selectedDateForModal = entry.date; 
+                modalTitleNew.style.display = 'none';
+                modalTitleEdit.style.display = 'inline';
+                removeEntryBtn.style.display = 'block';
+
+                if (entry.sourceType === 'youtube') {
+                    sourceTypeYoutube.checked = true;
+                    localAudioSection.classList.add('hidden');
+                    youtubeAudioSection.classList.remove('hidden');
+                    modalYoutubeUrl.value = `https://www.youtube.com/watch?v=${entry.audioRef}`;
+                    modalAudioSelect.value = "";
+                } else { 
+                    sourceTypeLocal.checked = true;
+                    localAudioSection.classList.remove('hidden');
+                    youtubeAudioSection.classList.add('hidden');
+                    modalAudioSelect.value = entry.audioRef || "";
+                    modalYoutubeUrl.value = "";
+                }
+                
+                modalImageSelect.value = entry.imageId || "";
+                modalTime.value = entry.time || '';
+                modalLocation.value = entry.location || '';
+                modalDescription.value = entry.description || '';
+                modalTags.value = entry.tags || '';
+                selectedMood = entry.mood || null;
+                updateMoodUI();
+                
+            } else {
+                modalTitleNew.style.display = 'inline';
+                modalTitleEdit.style.display = 'none';
+                removeEntryBtn.style.display = 'none';
+                
+                sourceTypeLocal.checked = true;
+                localAudioSection.classList.remove('hidden');
+                youtubeAudioSection.classList.add('hidden');
+                
+                modalTime.value = new Date().toTimeString().substring(0, 5);
+            }
+            
+            const formattedDate = new Date(selectedDateForModal + 'T00:00:00').toLocaleDateString(currentLang, { day: 'numeric', month: 'long' });
+            modalDateEl.textContent = formattedDate;
+
+            modal.classList.remove('hidden');
+            modal.firstElementChild.classList.add('modal-enter');
+        };
+        
+        const closeModal = () => {
+            if (modalCloseTimeout) clearTimeout(modalCloseTimeout); 
+            modal.firstElementChild.classList.remove('modal-enter');
+            modal.firstElementChild.classList.add('modal-leave');
+            modalCloseTimeout = setTimeout(() => { 
+                modal.classList.add('hidden');
+                modalCloseTimeout = null; 
+            }, 300);
+            
+            stopRecording(); 
+        };
+
+        // --- LÓGICA DEL NUEVO MODAL DE LISTA DE DÍA ---
+        const openDayEntriesModal = (dateStr, entries) => {
+            dayEntriesList.innerHTML = ''; 
+            const formattedDate = new Date(dateStr + 'T00:00:00').toLocaleDateString(currentLang, { day: 'numeric', month: 'long' });
+            dayEntriesDateEl.textContent = formattedDate;
+            selectedDateForModal = dateStr; 
+
+            entries.sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
+
+            entries.forEach(entry => {
+                const entryHTML = `
+                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-700/50">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">${entry.mood || '😶'}</span>
+                            <div>
+                                <span class="font-semibold">${entry.time || 'Todo el día'}</span>
+                                <p class="text-sm text-gray-400 truncate max-w-xs">${entry.description || 'Sin descripción'}</p>
+                            </div>
+                        </div>
+                        <div class="space-x-2">
+                            <button class="btn-icon text-blue-400" data-edit-id="${entry.id}" title="Editar"><i class="fas fa-pencil-alt"></i></button>
+                            <button class="btn-icon text-green-400" data-play-id="${entry.id}" title="Reproducir"><i class="fas fa-play"></i></button>
+                        </div>
+                    </div>
+                `;
+                dayEntriesList.insertAdjacentHTML('beforeend', entryHTML);
+            });
+
+            dayEntriesList.querySelectorAll('[data-play-id]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.currentTarget.dataset.playId);
+                    playAudioEntry(id);
+                    closeDayEntriesModal();
+                });
+            });
+            dayEntriesList.querySelectorAll('[data-edit-id]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.currentTarget.dataset.editId);
+                    openModal(null, id); 
+                    closeDayEntriesModal();
+                });
+            });
+
+            dayEntriesModal.classList.remove('hidden');
+        };
+
+        const closeDayEntriesModal = () => {
+            dayEntriesModal.classList.add('hidden');
+        };
+        
+        dayEntriesCloseBtn.addEventListener('click', closeDayEntriesModal);
+        dayEntriesAddNewBtn.addEventListener('click', () => {
+            openModal(selectedDateForModal, null); 
+            closeDayEntriesModal();
+        });
+
+
+        // --- LÓGICA DE GUARDADO (MODIFICADA) ---
+        saveEntryBtn.addEventListener('click', async () => {
+            saveEntryBtn.disabled = true;
+            
+            const sourceType = document.querySelector('input[name="sourceType"]:checked').value;
+            let audioRef = null;
+            let imageId = parseInt(modalImageSelect.value) || null;
+            
+            try {
+                const newImageFile = modalNewImage.files[0];
+                if (newImageFile) {
+                    imageId = await dbHelper.saveMedia(newImageFile);
+                }
+
+                if (sourceType === 'youtube') {
+                    const videoId = getYouTubeVideoId(modalYoutubeUrl.value);
+                    if (!videoId) {
+                        showToast('toastInvalidUrl', 'error');
+                        saveEntryBtn.disabled = false;
+                        return;
+                    }
+                    audioRef = videoId;
+                    
+                } else { 
+                    let localAudioId = parseInt(modalAudioSelect.value) || null;
+                    const newAudioFile = modalNewAudio.files[0];
+                    const recordedAudioBlob = recordedBlob; 
+                    
+                    if (recordedAudioBlob) {
+                        const recordingFile = new File([recordedAudioBlob], `grabacion-${new Date().toISOString()}.webm`, { type: recordedAudioBlob.type });
+                        localAudioId = await dbHelper.saveMedia(recordingFile);
+                    } else if (newAudioFile) {
+                        localAudioId = await dbHelper.saveMedia(newAudioFile);
+                    }
+                    
+                    if (!localAudioId) {
+                        const existingEntry = selectedEntryIdForModal ? allEntries.find(e => e.id === selectedEntryIdForModal) : null;
+                        if (!existingEntry || !existingEntry.audioRef) {
+                            showToast('toastNoAudio', 'error');
+                            saveEntryBtn.disabled = false;
+                            return;
+                        }
+                        localAudioId = existingEntry.audioRef; 
+                    }
+                    audioRef = localAudioId; 
+                }
+                
+                const entryData = {
+                    date: selectedDateForModal,
+                    sourceType: sourceType, 
+                    audioRef: audioRef,     
+                    imageId: imageId,
+                    time: modalTime.value || new Date().toTimeString().substring(0, 5),
+                    location: modalLocation.value,
+                    description: modalDescription.value,
+                    tags: modalTags.value,
+                    mood: selectedMood
+                };
+
+                if (selectedEntryIdForModal) {
+                    entryData.id = selectedEntryIdForModal;
+                }
+                
+                await dbHelper.saveEntry(entryData);
+                await loadDataAndRender(); 
+                
+                closeModal();
+                showToast('toastSaveSuccess', 'success');
+                
+            } catch (error) {
+                console.error("Error al guardar:", error);
+                showToast('toastSaveError', 'error');
+            } finally {
+                saveEntryBtn.disabled = false;
+                recordedBlob = null;
+            }
+        });
+
+        removeEntryBtn.addEventListener('click', async () => {
+            if (confirm(getString('confirmDelete'))) {
+                try {
+                    await dbHelper.deleteEntry(selectedEntryIdForModal); 
+                    await loadDataAndRender();
+                    closeModal();
+                    showToast('toastDeleteSuccess', 'info');
+                } catch (error) {
+                     console.error("Error al eliminar:", error);
+                    showToast('toastDeleteError', 'error');
+                }
+            }
+        });
+        
+        editEntryBtn.addEventListener('click', () => {
+            if (currentlyPlayingEntryId) {
+                openModal(null, currentlyPlayingEntryId);
+            }
+        });
+
+        // --- NUEVO: Event listeners para cambiar la fuente de audio ---
+        sourceTypeLocal.addEventListener('change', () => {
+            if (sourceTypeLocal.checked) {
+                localAudioSection.classList.remove('hidden');
+                youtubeAudioSection.classList.add('hidden');
+            }
+        });
+
+        sourceTypeYoutube.addEventListener('change', () => {
+            if (sourceTypeYoutube.checked) {
+                localAudioSection.classList.add('hidden');
+                youtubeAudioSection.classList.remove('hidden');
+            }
+        });
+        // --- Fin del nuevo código ---
+
+        closeModalBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => e.target === modal && closeModal());
+
+        // --- LÓGICA DE GRABADORA DE AUDIO ---
+        recordAudioBtn.addEventListener('click', async () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+        
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                recordingChunks = [];
+                recordedBlob = null;
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    recordingChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    recordedBlob = new Blob(recordingChunks, { type: 'audio/webm;codecs=opus' });
+                    stream.getTracks().forEach(track => track.stop()); 
+                    showToast('toastRecStop', 'info');
+                };
+                
+                mediaRecorder.start();
+                recordAudioBtn.classList.add('is-recording');
+                showToast('toastRecStart', 'success');
+                
+                recordingStartTime = Date.now();
+                recordingTimerEl.style.display = 'inline';
+                recordingTimerInterval = setInterval(() => {
+                    const seconds = Math.floor((Date.now() - recordingStartTime) / 1000);
+                    recordingTimerEl.textContent = formatTime(seconds);
+                }, 1000);
+            } catch (err) {
+                console.error("Error al iniciar grabación:", err);
+                showToast('toastRecError', 'error', { error: err.message });
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+            }
+            recordAudioBtn.classList.remove('is-recording');
+            if (recordingTimerInterval) {
+                clearInterval(recordingTimerInterval);
+                recordingTimerInterval = null;
+            }
+            recordingTimerEl.textContent = '0:00';
+            recordingTimerEl.style.display = 'none';
+        }
+        
+        // --- LÓGICA DE ESTADO DE ÁNIMO ---
+        moodSelector.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (btn) {
+                selectedMood = btn.dataset.mood;
+                updateMoodUI();
+            }
+        });
+        
+        function updateMoodUI() {
+            moodSelector.querySelectorAll('button').forEach(btn => {
+                if (btn.dataset.mood === selectedMood) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            });
+        }
+
+        // --- LÓGICA DEL REPRODUCTOR (MODIFICADA) ---
+        async function getFileFromCache(id) {
+            if (!id) return null;
+            if (fileCache.has(id)) return fileCache.get(id);
+            try {
+                const file = await dbHelper.getMedia(id);
+                fileCache.set(id, file);
+                return file;
+            } catch (error) {
+                console.error(`Error getting media ${id} from cache/db:`, error);
+                showToast('toastMediaLoadError', 'error', { id: id });
+                return null;
+            }
+        }
+        
+        function getYouTubeVideoId(url) {
+            if (!url) return null;
+            let videoId = null;
+            const YOUTUBE_REGEX = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+            const match = url.match(YOUTUBE_REGEX);
+            if (match && match[1]) {
+                videoId = match[1];
+            }
+            return videoId;
+        }
+
+        const playAudioEntry = async (entryId) => {
+            const entry = allEntries.find(e => e.id === entryId);
+            const audioReference = entry.audioRef;
+            if (!entry || !audioReference) {
+                showToast('toastNoAudioEntry', 'error');
+                return;
+            }
+            
+            if (ytProgressInterval) clearInterval(ytProgressInterval);
+            audioPlayer.pause();
+            if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+            activePlayerType = 'none'; 
+            
+            try {
+                currentlyPlayingEntryId = entry.id;
+                
+                if (entry.sourceType === 'youtube') {
+                    activePlayerType = 'youtube';
+                    if (ytPlayer && ytPlayer.loadVideoById) {
+                        ytPlayer.loadVideoById(entry.audioRef);
+                    } else {
+                        showToast('toastYtNotReady', 'error');
+                        return;
+                    }
+                    currentTrackTitleEl.textContent = entry.description || "Video de YouTube";
+                
+                } else { 
+                    activePlayerType = 'local';
+                    const audioFile = await getFileFromCache(audioReference);
+                    if (!audioFile) {
+                        throw new Error("Archivo de audio no encontrado en la base de datos.");
+                    }
+                    audioPlayer.src = URL.createObjectURL(audioFile);
+                    audioPlayer.play();
+                    
+                    const mediaInfo = mediaLibrary.find(m => m.id === audioReference);
+                    currentTrackTitleEl.textContent = mediaInfo?.name || "Audio desconocido";
+                }
+
+                const formattedDate = new Date(entry.date + 'T00:00:00').toLocaleDateString(currentLang, { day: 'numeric', month: 'long', year: 'numeric' });
+                trackDateTextEl.textContent = `${formattedDate} (${entry.time || ''})`;
+                
+                if(entry.imageId) {
+                    const imgFile = await getFileFromCache(entry.imageId);
+                    trackImageEl.src = imgFile ? URL.createObjectURL(imgFile) : "https://placehold.co/100x100/1f2937/4b5563?text=Error";
+                } else {
+                    trackImageEl.src = "https://placehold.co/100x100/1f2937/4b5563?text=Sin+Imagen";
+                }
+                
+                document.getElementById('display-location').textContent = entry.location || 'No especificado';
+                document.getElementById('display-description').textContent = entry.description || 'Sin descripción.';
+                document.getElementById('display-tags').textContent = entry.tags || 'Sin etiquetas';
+                metadataDisplayEl.classList.remove('hidden');
+                
+            } catch(error) {
+                console.error("Error al reproducir:", error);
+                showToast('toastFileLoadError', 'error');
+                currentlyPlayingEntryId = null;
+                activePlayerType = 'none';
+            }
+        };
+
+        playPauseBtn.addEventListener('click', () => {
+            if (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+                const playerState = ytPlayer.getPlayerState();
+                (playerState === YT.PlayerState.PLAYING) ? ytPlayer.pauseVideo() : ytPlayer.playVideo();
+            } else if (activePlayerType === 'local') {
+                (audioPlayer.paused && audioPlayer.src) ? audioPlayer.play() : audioPlayer.pause();
+            }
+        });
+        
+        audioPlayer.addEventListener('play', () => { if (activePlayerType === 'local') playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; });
+        audioPlayer.addEventListener('pause', () => { if (activePlayerType === 'local') playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; });
+        
+        const formatTime = (seconds) => {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${minutes}:${String(secs).padStart(2, '0')}`;
+        };
+        
+        audioPlayer.addEventListener('timeupdate', () => {
+            if (activePlayerType !== 'local' || !audioPlayer.duration) return; 
+            progressBar.style.width = `${(audioPlayer.currentTime / audioPlayer.duration) * 100}%`;
+            currentTimeEl.textContent = formatTime(audioPlayer.currentTime);
+        });
+        audioPlayer.addEventListener('loadedmetadata', () => {
+             if (activePlayerType === 'local') totalDurationEl.textContent = formatTime(audioPlayer.duration);
+        });
+        
+        progressBarContainer.addEventListener('click', (e) => {
+            const width = progressBarContainer.clientWidth;
+            const clickPos = e.offsetX / width;
+            
+            if (activePlayerType === 'youtube' && ytPlayer && ytPlayer.getDuration) {
+                const duration = ytPlayer.getDuration();
+                if (duration > 0) ytPlayer.seekTo(duration * clickPos);
+            } else if (activePlayerType === 'local' && audioPlayer.duration) {
+                audioPlayer.currentTime = clickPos * audioPlayer.duration;
+            }
+        });
+        
+        volumeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            volumeSlider.style.display = volumeSlider.style.display === 'block' ? 'none' : 'block';
+        });
+        volumeSlider.addEventListener('input', (e) => {
+            const volume = e.target.value;
+            audioPlayer.volume = volume;
+            if (ytPlayer && ytPlayer.setVolume) {
+                ytPlayer.setVolume(volume * 100); 
+            }
+        });
+        
+        const getSortedEntries = () => allEntries.sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+        
+        nextTrackBtn.addEventListener('click', () => {
+            if (!currentlyPlayingEntryId) return;
+            const sortedEntries = getSortedEntries();
+            const currentIndex = sortedEntries.findIndex(e => e.id === currentlyPlayingEntryId);
+            const nextIndex = (currentIndex + 1) % sortedEntries.length;
+            playAudioEntry(sortedEntries[nextIndex].id);
+        });
+        
+        prevTrackBtn.addEventListener('click', () => {
+            if (!currentlyPlayingEntryId) return;
+            const sortedEntries = getSortedEntries();
+            const currentIndex = sortedEntries.findIndex(e => e.id === currentlyPlayingEntryId);
+            const prevIndex = (currentIndex - 1 + sortedEntries.length) % sortedEntries.length;
+            playAudioEntry(sortedEntries[prevIndex].id);
+        });
+
+        // --- Importar/Exportar ---
+        exportBtn.addEventListener('click', async () => {
+            const dataToExport = {
+                entries: allEntries,
+                media: mediaLibrary
+            };
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `capsula-sonora-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        importBtn.addEventListener('click', () => importFileInput.click());
+        importFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (confirm("Importar datos sobrescribirá las entradas existentes. ¿Continuar? (Los archivos multimedia no se importan, deben cargarse por separado).")) {
+                        if (data.entries) {
+                            const tx = dbHelper.db.transaction('entriesStore', 'readwrite');
+                            await tx.objectStore('entriesStore').clear();
+                            for (const entry of data.entries) {
+                                delete entry.id;
+                                await tx.objectStore('entriesStore').add(entry);
+                            }
+                            await tx.done;
+                        }
+                        await loadDataAndRender();
+                        showToast('toastLoadSuccess', 'success');
+                    }
+                } catch (err) {
+                    console.error("Error al importar:", err);
+                    showToast('toastLoadError', 'error');
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        // --- INICIALIZADOR DE YOUTUBE ---
+        window.onYouTubeIframeAPIReady = function() {
+            console.log("YouTube API Ready");
+            ytPlayer = new YT.Player('youtube-player', {
+                height: '1',
+                width: '1',
+                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1 },
+                events: {
+                    'onReady': () => console.log("YT Player Ready"),
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+        
+        function onPlayerStateChange(event) {
+            if (activePlayerType !== 'youtube') return;
+            
+            if (event.data === YT.PlayerState.PLAYING) {
+                playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                totalDurationEl.textContent = formatTime(ytPlayer.getDuration());
+                if (ytProgressInterval) clearInterval(ytProgressInterval);
+                ytProgressInterval = setInterval(() => {
+                    if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+                        const currentTime = ytPlayer.getCurrentTime();
+                        const duration = ytPlayer.getDuration();
+                        if (duration > 0) {
+                            progressBar.style.width = `${(currentTime / duration) * 100}%`;
+                            currentTimeEl.textContent = formatTime(currentTime);
+                        }
+                    }
+                }, 250);
+            } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+                playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                if (ytProgressInterval) clearInterval(ytProgressInterval); 
+            }
+        }
+        
+        async function initializeApp() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            applyTheme(savedTheme);
+            const savedLang = localStorage.getItem('language') || 'es';
+            languageSelect.value = savedLang;
+            setLanguage(savedLang); 
+            
+            try {
+                await dbHelper.initDB();
+                await loadDataAndRender(); 
+            } catch (error) {
+                showToast('toastDbError', 'error');
+            }
+            
+            // Iniciar el temporizador para actualizar el fondo
+            setInterval(applyDynamicBackground, 60000); // Cada minuto
+        }
+        
+        initializeApp();
+    });
+    </script>
+</body>
+</html>
+
+
